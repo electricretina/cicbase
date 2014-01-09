@@ -126,18 +126,37 @@ class FileReferenceConverter extends \TYPO3\CMS\Extbase\Property\TypeConverter\P
 		# Create the FileObject by adding the uploaded file to the FolderObject.
 		$file = $folder->addUploadedFile($source, 'replace');
 
-		# Build a FileReference object using the FileObject
-		$ref = $this->fileFactory->createFileReferenceObject(array(
+		# Default properties for our reference object from our File object.
+		$referenceProperties = array(
 			'uid_local' => $file->getUid(),
-			'table_local' => 'sys_file',
-		));
+			'table_local' => 'sys_file'
+		);
 
+		# Allow for additional reference properties to be added
+		$additionalReferenceProperties = $configuration->getConfigurationValue(get_class($this), 'additionalReferenceProperties');
+		if (is_array($additionalReferenceProperties)) {
+			$referenceProperties = array_merge($referenceProperties, $additionalReferenceProperties);
+		}
+
+		# Build a FileReference object using our reference properties
+		$ref = $this->fileFactory->createFileReferenceObject($referenceProperties);
+
+		# This will save the file now
 		$this->fileRepository->add($file);
 
 		# Convert the Core FileReference we made to an ExtBase FileReference
-		$extbaseRef = \TYPO3\CMS\Core\Utility\GeneralUtility::makeInstance('TYPO3\CMS\Extbase\Domain\Model\FileReference');
+		$extbaseRef = \TYPO3\CMS\Core\Utility\GeneralUtility::makeInstance('CIC\Cicbase\Domain\Model\FileReference');
 		$extbaseRef->setOriginalResource($ref);
-		return $extbaseRef;
+
+		# If we're just making a FileReference return it
+		if ($targetType == 'CIC\Cicbase\Domain\Model\FileReference') {
+			return $extbaseRef;
+		}
+
+		# Otherwise build a collection
+		$storage = \TYPO3\CMS\Core\Utility\GeneralUtility::makeInstance('TYPO3\CMS\Extbase\Persistence\ObjectStorage');
+		$storage->attach($extbaseRef);
+		return $storage;
 
 		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 		// OLD CODE:
