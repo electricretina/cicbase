@@ -14,7 +14,10 @@ use CIC\Cicbase\Domain\Model\FileReference;
  * as type convert options
  * ========================
  *
- * plugin.tx_ext.settings.file {
+ * plugin.tx_ext.settings.files {
+ *   file { # default propertyPath
+ *     # ...
+ *   }
  *   partner_image {
  *     maxSize = 20971520
  *     allowedMimes {
@@ -60,6 +63,14 @@ use CIC\Cicbase\Domain\Model\FileReference;
  * protected function saveFiles(Partner $partner) {
  *   $image = $partner->getImage();
  *   $this->fileReferenceFactory->save($image, 'partner.image');
+ * }
+ *
+ * Or to enforce one to one relationships
+ * (since Extbase isn't doing a good job of this)
+ *
+ * protected function saveFiles(Partner $partner) {
+ *   $image = $partner->getImage();
+ *   $this->fileReferenceFactory->saveOneToOne($partner, 'image', $image, 'partner.image');
  * }
  *
  * @package CIC\Cicbase\Property\TypeConverter

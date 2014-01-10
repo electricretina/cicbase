@@ -215,6 +215,57 @@ class FileReferenceFactory implements \TYPO3\CMS\Core\SingletonInterface {
 		$this->limbo->clearHeld($key);
 	}
 
+
+
+	/**
+	 * Since ExtBase isn't forcing the one to one relationships
+	 * for FileReferences, we're doing it here.
+	 *
+	 * ASSUMPTION: FileReference to File is one to one as well.
+	 * Meaning, deleting a FileReference will delete the File.
+	 *
+	 * NOTE: At this point, the FileReference object has not been saved
+	 * in the database.
+	 *
+	 * @param FileReference $fileReference
+	 * @param \TYPO3\CMS\Extbase\DomainObject\DomainObjectInterface $object
+	 * @param string $fieldname
+	 * @param string $propertyPath
+	 */
+	public function saveOneToOne(\TYPO3\CMS\Extbase\DomainObject\DomainObjectInterface $object, $fieldname, FileReference $fileReference, $propertyPath = 'file' ) {
+		if (!$object->getUid()) {
+			return $this->save($fileReference, $propertyPath);
+		}
+		$refTable = 'sys_file_reference';
+		$fileTable = 'sys_file';
+		$fileUids = array();
+		$refUids = array();
+		$uidForeign = $object->getUid();
+		$tablenames = $fileReference->getTablenames();
+		/** @var \TYPO3\CMS\Dbal\Database\DatabaseConnection $db */
+		$db = $GLOBALS['TYPO3_DB'];
+		$select = "$refTable.uid, $refTable.uid_local, $refTable.tablenames, $refTable.uid_foreign, $refTable.fieldname, $fileTable.identifier";
+		$where = "$refTable.tablenames = '$tablenames' AND $refTable.uid_foreign = $uidForeign AND $refTable.fieldname = '$fieldname' AND $fileTable.uid = $refTable.uid_local";
+		$rows = $db->exec_SELECTgetRows($select, "$refTable, $fileTable", $where);
+		foreach ($rows as $row) {
+			$filename = PATH_site.'fileadmin/'.$row['identifier'];
+			unlink($filename);
+			$fileUids[] = $row['uid_local'];
+			$refUids[] = $row['uid'];
+		}
+
+		if(count($fileUids) > 1) {
+			$db->exec_DELETEquery($refTable, "uid IN ".implode(',', $refUids));
+			$db->exec_DELETEquery($fileTable, "uid IN ".implode(',', $fileUids));
+		}
+		if(count($fileUids == 1)) {
+			$db->exec_DELETEquery($refTable, "uid = ".$refUids[0]);
+			$db->exec_DELETEquery($fileTable, "uid = ".$fileUids[0]);
+		}
+
+		return $this->save($fileReference, $propertyPath);
+	}
+
 	/**
 	 * @param bool $absolute
 	 * @param bool $mkdir
