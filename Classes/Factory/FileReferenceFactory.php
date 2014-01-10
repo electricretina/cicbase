@@ -243,7 +243,7 @@ class FileReferenceFactory implements \TYPO3\CMS\Core\SingletonInterface {
 	 * @param string $propertyPath
 	 */
 	public function saveOneToOne(\TYPO3\CMS\Extbase\DomainObject\DomainObjectInterface $object, $fieldname, FileReference $fileReference, $propertyPath = 'file' ) {
-		if (!$object->getUid()) {
+		if (!$object->getUid() || $fileReference->getUid()) {
 			return $this->save($fileReference, $propertyPath);
 		}
 		$refTable = 'sys_file_reference';
