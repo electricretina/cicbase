@@ -59,6 +59,9 @@ class FileReference extends \TYPO3\CMS\Extbase\Domain\Model\FileReference implem
 	/** @var string */
 	protected $description;
 
+	/** @var string */
+	protected $originalFilename;
+
 
 	/**
 	 * @param \TYPO3\CMS\Core\Resource\FileReference $originalResource
@@ -144,6 +147,20 @@ class FileReference extends \TYPO3\CMS\Extbase\Domain\Model\FileReference implem
 	 */
 	public function getDescription() {
 		return $this->description;
+	}
+
+	/**
+	 * @param string $originalFilename
+	 */
+	public function setOriginalFilename($originalFilename) {
+		$this->originalFilename = $originalFilename;
+	}
+
+	/**
+	 * @return string
+	 */
+	public function getOriginalFilename() {
+		return $this->originalFilename;
 	}
 }
 

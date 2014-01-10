@@ -171,6 +171,7 @@ class FileReferenceFactory implements \TYPO3\CMS\Core\SingletonInterface {
 		$source = $this->getUploadedFileData($propertyPath);
 
 		// Use the file hash as the name of the file
+		$originalFilename = $source['name'];
 		$source['name'] = md5_file($source['tmp_name']) . '.' . pathinfo($source['name'], PATHINFO_EXTENSION);
 
 		// Create the FileObject by adding the uploaded file to the FolderObject.
@@ -179,7 +180,8 @@ class FileReferenceFactory implements \TYPO3\CMS\Core\SingletonInterface {
 		// Default properties for our reference object from our File object.
 		$referenceProperties = array(
 			'uid_local' => $file->getUid(),
-			'table_local' => 'sys_file'
+			'table_local' => 'sys_file',
+			'originalFilename' => $originalFilename
 		);
 
 		// Allow for additional reference properties to be added
@@ -198,6 +200,11 @@ class FileReferenceFactory implements \TYPO3\CMS\Core\SingletonInterface {
 	}
 
 	/**
+	 * This is the last step of the FileReference creation process.
+	 * It should be called when the file is ready to be saved
+	 * permanently. At this point, the file will be moved from
+	 * a temporary location to a permanent location.
+	 *
 	 * @param FileReference $fileReference
 	 * @param string $key
 	 */
