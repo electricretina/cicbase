@@ -209,6 +209,9 @@ class FileReferenceFactory implements \TYPO3\CMS\Core\SingletonInterface {
 	 * @param string $key
 	 */
 	public function save(FileReference $fileReference, $key = '') {
+		if ($fileReference->getUid()) {
+			return;
+		}
 		$pathExists = $this->permanentPathExists();
 		$relFolderPath = $this->buildPermanentPath(FALSE);
 

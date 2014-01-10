@@ -147,7 +147,7 @@ class FileReferenceConverter extends \TYPO3\CMS\Extbase\Property\TypeConverter\P
 	 * @api
 	 */
 	public function canConvertFrom($source, $targetType) {
-		return TRUE;
+		return !is_numeric($source);
 	}
 
 	/**
@@ -170,6 +170,10 @@ class FileReferenceConverter extends \TYPO3\CMS\Extbase\Property\TypeConverter\P
 	 * @throws \TYPO3\CMS\Extbase\Configuration\Exception
 	 */
 	public function convertFrom($source, $targetType, array $convertedChildProperties = array(), \TYPO3\CMS\Extbase\Property\PropertyMappingConfigurationInterface $configuration = NULL) {
+		if (is_numeric($source)) {
+			return $this->fetchObjectFromPersistence($source, $targetType);
+		}
+
 		$thisClass = get_class($this);
 		$propertyPath = $configuration->getConfigurationValue($thisClass, 'propertyPath');
 
@@ -205,13 +209,13 @@ class FileReferenceConverter extends \TYPO3\CMS\Extbase\Property\TypeConverter\P
 		// Too risky to use this type converter without some settings in place.
 		if(!$maxSize && (!isset($conf['dontValidateSize']) || !$conf['dontValidateSize'])) {
 			throw new \TYPO3\CMS\Extbase\Configuration\Exception('Before you can use the file type converter, you must set a
-			 fileMaxSize value in the settings section of your extension typoscript, or in the file type converter
-			 configuration.', 1337043345);
+			 maxSize value in the settings section of your extension typoscript, or in the file type converter
+			 configuration. You can also get this error if your upload input is not named properly.', 1337043345);
 		}
 		if ((!is_array($allowedTypes) || count($allowedTypes) == 0) && (!isset($conf['dontValidateMime']) || !$conf['dontValidateMime'])) {
 			throw new \TYPO3\CMS\Extbase\Configuration\Exception('Before you can use the file type converter, you must configure
-			 fileAllowedMime settings section of your extension typoscript, or in the file type converter
-			 configuration.', 1337043346);
+			 allowedMimes settings section of your extension typoscript, or in the file type converter
+			 configuration. You can also get this error if your upload input is not named properly.', 1337043346);
 		}
 
 		$additionalReferenceProperties = $configuration->getConfigurationValue($thisClass, 'additionalReferenceProperties');
