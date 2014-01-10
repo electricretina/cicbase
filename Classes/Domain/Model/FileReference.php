@@ -36,7 +36,7 @@ use TYPO3\CMS\Core\Utility\GeneralUtility;
  *
  * When ExtBase supports frontend file uploads, we can stop using this class.
  */
-class FileReference extends \TYPO3\CMS\Extbase\Domain\Model\FileReference {
+class FileReference extends \TYPO3\CMS\Extbase\Domain\Model\FileReference implements \CIC\Cicbase\Persistence\LimboObjectInterface {
 
 	/**
 	 * @var \TYPO3\CMS\Core\Resource\FileRepository
