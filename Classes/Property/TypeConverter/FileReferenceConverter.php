@@ -222,14 +222,7 @@ class FileReferenceConverter extends \TYPO3\CMS\Extbase\Property\TypeConverter\P
 
 		$reference = $this->fileFactory->createFileReference($propertyPath, $additionalReferenceProperties, $allowedTypes, $maxSize);
 
-		if ($targetType == 'CIC\Cicbase\Domain\Model\FileReference' || $reference instanceof \TYPO3\CMS\Extbase\Error\Error) {
-			return $reference;
-		}
-
-		# Otherwise build a collection
-		$storage = $this->objectManager->getEmptyObject('TYPO3\CMS\Extbase\Persistence\ObjectStorage');
-		$storage->attach($reference);
-		return $storage;
+		return $reference;
 	}
 
 }
