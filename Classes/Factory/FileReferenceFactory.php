@@ -119,19 +119,20 @@ class FileReferenceFactory implements \TYPO3\CMS\Core\SingletonInterface {
 		$this->handleUploadErrors($uploadedFileData);
 
 		if($this->messages->hasErrors()) {
-			$this->fileRepository->clearHeld($key);
+			$this->limbo->clearHeld($key);
 			return $this->messages->getFirstError();
 		} else {
-//			if(!$this->settings['file']['dontValidateType']) {
-//				$this->validateType($uploadedFileData,$allowedTypes);
-//			}
-//			if(!$this->settings['file']['dontValidateSize']) {
-//				$this->validateSize($uploadedFileData,$maxSize);
-//			}
+			$propertyPathUnderscores = $propertyPath ? str_replace('.', '_', $propertyPath) : 'file';
+			if(!$this->settings['files']['dontValidateMime'][$propertyPathUnderscores]) {
+				$this->validateType($uploadedFileData, $allowedTypes);
+			}
+			if(!$this->settings['files']['dontValidateSize'][$propertyPathUnderscores]) {
+				$this->validateSize($uploadedFileData, $maxSize);
+			}
 		}
 
 		if($this->messages->hasErrors()) {
-			$this->fileRepository->clearHeld($key);
+			$this->limbo->clearHeld($key);
 			return $this->messages->getFirstError();
 		} else {
 			$fileReference = $this->buildFileReference($propertyPath, $additionalReferenceProperties);
@@ -383,7 +384,7 @@ class FileReferenceFactory implements \TYPO3\CMS\Core\SingletonInterface {
 	protected function validateType($uploadedFileData,$allowedTypes) {
 		$pathInfo = pathinfo($uploadedFileData['name']);
 		$extension = $pathInfo['extension'];
-		$allowedMimes = t3lib_div::trimExplode(',',$allowedTypes[$extension]);
+		$allowedMimes = GeneralUtility::trimExplode(',',$allowedTypes[$extension]);
 		if(in_array($uploadedFileData['type'],$allowedMimes)) {
 			return NULL;
 		} else {

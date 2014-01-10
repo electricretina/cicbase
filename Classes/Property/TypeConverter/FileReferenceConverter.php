@@ -3,7 +3,71 @@ namespace CIC\Cicbase\Property\TypeConverter;
 
 use CIC\Cicbase\Domain\Model\FileReference;
 
+/**
+ * Class FileReferenceConverter
+ *
+ * Converts $_FILE arrays into FileReference objects.
+ *
+ *
+ * Typoscript settings (required)
+ * You can also set maxSize and allowedMimes in the controller
+ * as type convert options
+ * ========================
+ *
+ * plugin.tx_ext.settings.file {
+ *   partner_image {
+ *     maxSize = 20971520
+ *     allowedMimes {
+ *       bmp = image/bmp
+ *       gif = image/gif
+ *       jpeg = image/jpeg,image/jpg
+ *       jpg = image/jpeg,image/jpg
+ *       png = image/png
+ *     }
+ *   }
+ *   partner_documents {
+ *     dontValidateMime = 1
+ *     dontValidateSize = 1
+ *   }
+ * }
+ *
+ *
+ *
+ * Controller setup (required)
+ * ========================
+ *
+ * $this->arguments->getArgument('partner')->getPropertyMappingConfiguration()
+ *   ->forProperty('image')
+ *   ->setTypeConverter($fileConverter)
+ *   ->setTypeConverterOption($fileConverterName, 'additionalReferenceProperties', array('tablenames' => 'tx_orbest_domain_model_partner'))
+ *   ->setTypeConverterOption($fileConverterName, 'propertyPath', 'partner.image');
+ *
+ *
+ *
+ * Repository setup (required)
+ * ========================
+ *
+ * public function add($partner) {
+ *   $this->saveFiles($partner);
+ *   parent::add($partner);
+ * }
+ *
+ * public function update($partner) {
+ *   $this->saveFiles($partner);
+ *   parent::update($partner);
+ * }
+ *
+ * protected function saveFiles(Partner $partner) {
+ *   $image = $partner->getImage();
+ *   $this->fileReferenceFactory->save($image, 'partner.image');
+ * }
+ *
+ * @package CIC\Cicbase\Property\TypeConverter
+ */
 class FileReferenceConverter extends \TYPO3\CMS\Extbase\Property\TypeConverter\PersistentObjectConverter {
+
+	/** @var array  */
+	protected $settings = array();
 
 	/**
 	 * The source types this converter can convert.
@@ -41,6 +105,10 @@ class FileReferenceConverter extends \TYPO3\CMS\Extbase\Property\TypeConverter\P
 	 */
 	protected $limbo;
 
+	/**
+	 * @var \TYPO3\CMS\Extbase\Configuration\ConfigurationManagerInterface
+	 */
+	protected $configurationManager;
 
 	/**
 	 * @param Tx_Extbase_Configuration_ConfigurationManagerInterface $configurationManager
@@ -86,13 +154,14 @@ class FileReferenceConverter extends \TYPO3\CMS\Extbase\Property\TypeConverter\P
 	 * @param mixed $source
 	 * @param string $targetType
 	 * @param array $convertedChildProperties
-	 * @param null|\TYPO3\CMS\Extbase\Property\PropertyMappingConfigurationInterface $configuration
-	 * @return null|object|\TYPO3\CMS\Extbase\Domain\Model\FileReference|\TYPO3\CMS\Extbase\Error\Error
-	 * @throws Tx_Extbase_Configuration_Exception
+	 * @param \TYPO3\CMS\Extbase\Property\PropertyMappingConfigurationInterface $configuration
+	 * @return mixed|null|\CIC\Cicbase\Domain\Model\FileReference|\TYPO3\CMS\Extbase\Error\Error
+	 * @throws \TYPO3\CMS\Extbase\Configuration\Exception
 	 */
 	public function convertFrom($source, $targetType, array $convertedChildProperties = array(), \TYPO3\CMS\Extbase\Property\PropertyMappingConfigurationInterface $configuration = NULL) {
 		$thisClass = get_class($this);
 		$propertyPath = $configuration->getConfigurationValue($thisClass, 'propertyPath');
+
 
 		if(!$propertyPath) {
 			$propertyPath = 'file';
@@ -100,47 +169,45 @@ class FileReferenceConverter extends \TYPO3\CMS\Extbase\Property\TypeConverter\P
 		} else {
 			$key = $propertyPath;
 		}
+
 		if(!$this->fileFactory->wasUploadAttempted($propertyPath)) {
 			$fileReference = $this->limbo->getHeld($key);
 			if($fileReference instanceof FileReference) {
 				return $fileReference;
 			} else {
-				// this is where we end up if no file upload was attempted (eg, form was submitted without a value
-				// in the upload field, and we were unable to find a held file. In this case, return false, as though
-				// nothing was ever posted.
 				return NULL;
 			}
 		}
 
-		// Otherwise, we create a new file object. Note that we use the fileFactory to turn $_FILE data into
-		// a proper file object. Elsewhere, we use the limbo to retrieve file objects, even those that
-		// haven't yet been persisted to the database;
-		$allowedTypes = $configuration->getConfigurationValue($thisClass, 'allowedTypes');
+		$propertyPathUnderscores = str_replace('.', '_', $propertyPath);
+		$conf = $this->settings['files'][$propertyPathUnderscores];
+
+		$allowedTypes = $configuration->getConfigurationValue($thisClass, 'allowedMimes');
 		$maxSize = $configuration->getConfigurationValue($thisClass, 'maxSize');
-//		if(!$allowedTypes) {
-//			$allowedTypes = $this->settings['file']['fileAllowedMime'];
-//		}
-//		if(!$maxSize) {
-//			$maxSize = $this->settings['file']['fileMaxSize'];
-//		}
-//
-//		// Too risky to use this type converter without some settings in place.
-//		if(!$maxSize) {
-//			throw new \TYPO3\CMS\Extbase\Configuration\Exception('Before you can use the file type converter, you must set a
-//			 fileMaxSize value in the settings section of your extension typoscript, or in the file type converter
-//			 configuration.', 1337043345);
-//		}
-//		if (!is_array($allowedTypes) && count($allowedTypes) == 0) {
-//			throw new \TYPO3\CMS\Extbase\Configuration\Exception('Before you can use the file type converter, you must configure
-//			 fileAllowedMime settings section of your extension typoscript, or in the file type converter
-//			 configuration.', 1337043346);
-//		}
+		if(!$allowedTypes && isset($conf['allowedMimes'])) {
+			$allowedTypes = $conf['allowedMimes'];
+		}
+		if(!$maxSize && isset($conf['maxSize'])) {
+			$maxSize = $conf['maxSize'];
+		}
+
+		// Too risky to use this type converter without some settings in place.
+		if(!$maxSize && (!isset($conf['dontValidateSize']) || !$conf['dontValidateSize'])) {
+			throw new \TYPO3\CMS\Extbase\Configuration\Exception('Before you can use the file type converter, you must set a
+			 fileMaxSize value in the settings section of your extension typoscript, or in the file type converter
+			 configuration.', 1337043345);
+		}
+		if ((!is_array($allowedTypes) || count($allowedTypes) == 0) && (!isset($conf['dontValidateMime']) || !$conf['dontValidateMime'])) {
+			throw new \TYPO3\CMS\Extbase\Configuration\Exception('Before you can use the file type converter, you must configure
+			 fileAllowedMime settings section of your extension typoscript, or in the file type converter
+			 configuration.', 1337043346);
+		}
 
 		$additionalReferenceProperties = $configuration->getConfigurationValue($thisClass, 'additionalReferenceProperties');
 
 		$reference = $this->fileFactory->createFileReference($propertyPath, $additionalReferenceProperties, $allowedTypes, $maxSize);
 
-		if ($targetType == 'CIC\Cicbase\Domain\Model\FileReference') {
+		if ($targetType == 'CIC\Cicbase\Domain\Model\FileReference' || $reference instanceof \TYPO3\CMS\Extbase\Error\Error) {
 			return $reference;
 		}
 
