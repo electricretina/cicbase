@@ -181,7 +181,7 @@ class FileReferenceFactory implements \TYPO3\CMS\Core\SingletonInterface {
 		$referenceProperties = array(
 			'uid_local' => $file->getUid(),
 			'table_local' => 'sys_file',
-			'originalFilename' => $originalFilename
+			'title' => $originalFilename,
 		);
 
 		// Allow for additional reference properties to be added
