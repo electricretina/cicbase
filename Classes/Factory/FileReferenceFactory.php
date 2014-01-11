@@ -208,7 +208,7 @@ class FileReferenceFactory implements \TYPO3\CMS\Core\SingletonInterface {
 	 * @param FileReference $fileReference
 	 * @param string $key
 	 */
-	public function save(FileReference $fileReference, $key = '') {
+	protected function save(FileReference $fileReference, $key = '') {
 		if ($fileReference->getUid()) {
 			return;
 		}
@@ -223,6 +223,48 @@ class FileReferenceFactory implements \TYPO3\CMS\Core\SingletonInterface {
 		$file->moveTo($folder, $file->getName(), 'replace');
 
 		$this->limbo->clearHeld($key);
+	}
+
+
+	/**
+	 *
+	 *
+	 * @param \TYPO3\CMS\Extbase\DomainObject\DomainObjectInterface $object
+	 * @param string $fieldname
+	 * @param \Iterator $fileReferences
+	 * @param string $key
+	 * @throws \Exception
+	 */
+	public function saveAll(\TYPO3\CMS\Extbase\DomainObject\DomainObjectInterface $object, $fieldname, \Iterator $fileReferences, $key = '') {
+
+		$someSavedAlready = FALSE;
+		foreach ($fileReferences as $ref) {
+			if (!$ref instanceof FileReference) {
+				throw new \Exception("FileReferenceFactory cannot save all. There was an element in the list that wasn't a FileReference object.");
+			}
+			$uid = $ref->getUid();
+			if ($uid) {
+				$someSavedAlready = TRUE;
+				$keepers[] = $uid;
+				$tablenames = $ref->getTablenames();
+			}
+		}
+
+		// This is a new $object, unlikely to have any existing FileReferences for this field.
+		if (!$object->getUid() || !$someSavedAlready) {
+			foreach ($fileReferences as $ref) {
+				$this->save($ref, $key);
+			}
+			return;
+		}
+
+		// Remove FileReferences for this field, unless we're keeping them.
+		$this->removeFileReferences($object->getUid(), $tablenames, $fieldname, $keepers);
+
+		// Save any new ones
+		foreach($fileReferences as $ref) {
+			$this->save($ref, $key);
+		}
 	}
 
 
@@ -243,37 +285,69 @@ class FileReferenceFactory implements \TYPO3\CMS\Core\SingletonInterface {
 	 * @param string $propertyPath
 	 */
 	public function saveOneToOne(\TYPO3\CMS\Extbase\DomainObject\DomainObjectInterface $object, $fieldname, FileReference $fileReference, $propertyPath = 'file' ) {
+		// This is a new $object, unlikely to have any existing FileReferences for this field.
 		if (!$object->getUid() || $fileReference->getUid()) {
 			return $this->save($fileReference, $propertyPath);
 		}
-		$refTable = 'sys_file_reference';
-		$fileTable = 'sys_file';
-		$fileUids = array();
-		$refUids = array();
-		$uidForeign = $object->getUid();
-		$tablenames = $fileReference->getTablenames();
-		/** @var \TYPO3\CMS\Dbal\Database\DatabaseConnection $db */
-		$db = $GLOBALS['TYPO3_DB'];
-		$select = "$refTable.uid, $refTable.uid_local, $refTable.tablenames, $refTable.uid_foreign, $refTable.fieldname, $fileTable.identifier";
-		$where = "$refTable.tablenames = '$tablenames' AND $refTable.uid_foreign = $uidForeign AND $refTable.fieldname = '$fieldname' AND $fileTable.uid = $refTable.uid_local";
-		$rows = $db->exec_SELECTgetRows($select, "$refTable, $fileTable", $where);
-		foreach ($rows as $row) {
-			$filename = PATH_site.'fileadmin/'.$row['identifier'];
-			unlink($filename);
-			$fileUids[] = $row['uid_local'];
-			$refUids[] = $row['uid'];
-		}
 
-		if(count($fileUids) > 1) {
-			$db->exec_DELETEquery($refTable, "uid IN ".implode(',', $refUids));
-			$db->exec_DELETEquery($fileTable, "uid IN ".implode(',', $fileUids));
-		}
-		if(count($fileUids == 1)) {
-			$db->exec_DELETEquery($refTable, "uid = ".$refUids[0]);
-			$db->exec_DELETEquery($fileTable, "uid = ".$fileUids[0]);
-		}
+		// Remove all FileReferences for this field
+		$this->removeFileReferences($object->getUid(), $fileReference->getTablenames(), $fieldname);
 
 		return $this->save($fileReference, $propertyPath);
+	}
+
+
+	/**
+	 * This function removes all FileReference records
+	 * with the given arguments, except the keeper UIDs.
+	 *
+	 * @param integer $uidForeign
+	 * @param string $tablenames
+	 * @param string $fieldname
+	 * @param array $keepers UIDs
+	 */
+	protected function removeFileReferences($uidForeign, $tablenames, $fieldname, $keepers = array()) {
+		/** @var \TYPO3\CMS\Dbal\Database\DatabaseConnection $db */
+		$db = $GLOBALS['TYPO3_DB'];
+		$refTable = 'sys_file_reference';
+		$fileTable = 'sys_file';
+		$filesToDelete = array();
+		$refUids = array();
+		$fileUids = array();
+
+		// Clauses
+		$select = "$refTable.uid, $refTable.uid_local, $refTable.tablenames, $refTable.uid_foreign, $refTable.fieldname, $fileTable.identifier";
+		$identifyingClauses = "$refTable.tablenames = '$tablenames' AND $refTable.uid_foreign = $uidForeign AND $refTable.fieldname = '$fieldname'";
+		$where = "$identifyingClauses AND $fileTable.uid = $refTable.uid_local";
+		if ($keepers) {
+			$where .= " AND $refTable.uid NOT IN (". implode(',', $keepers).")";
+		}
+
+		// Consolidate Files and FileReferences to delete
+		$rows = $db->exec_SELECTgetRows($select, "$refTable, $fileTable", $where);
+		foreach ($rows as $row) {
+			$refUids[] = $row['uid'];
+			$filesToDelete[$row['uid_local']] = PATH_site.'fileadmin/'.$row['identifier'];
+		}
+
+		// Don't delete File objects if there are other references to them
+		$refUidsClause = implode(',', $refUids);
+		foreach ($filesToDelete as $fileUid => $filePath) {
+			$count = $db->exec_SELECTcountRows('uid', "$refTable", "uid_local = $fileUid AND uid NOT IN ($refUidsClause) AND $identifyingClauses");
+			if (!$count) {
+				$fileUids[] = $fileUid;
+				unlink($filePath);
+			}
+		}
+
+		// Ok to remove these now
+		if (count($refUids)) {
+			$db->exec_DELETEquery($refTable, "uid IN ($refUidsClause)");
+		}
+
+		if (count($fileUids)) {
+			$db->exec_DELETEquery($fileTable, "uid IN (".implode(',', $fileUids).")");
+		}
 	}
 
 	/**

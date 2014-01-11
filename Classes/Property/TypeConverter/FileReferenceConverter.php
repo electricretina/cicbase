@@ -62,15 +62,11 @@ use CIC\Cicbase\Domain\Model\FileReference;
  *
  * protected function saveFiles(Partner $partner) {
  *   $image = $partner->getImage();
- *   $this->fileReferenceFactory->save($image, 'partner.image');
- * }
- *
- * Or to enforce one to one relationships
- * (since Extbase isn't doing a good job of this)
- *
- * protected function saveFiles(Partner $partner) {
- *   $image = $partner->getImage();
- *   $this->fileReferenceFactory->saveOneToOne($partner, 'image', $image, 'partner.image');
+ *   if ($image) {
+ *     $this->fileReferenceFactory->saveOneToOne($partner, 'image', $image, 'partner.image');
+ *   }
+ *   $documents = $partner->getDocuments();
+ *   $this->fileReferenceFactory->saveAll($partner, 'documents', $documents, 'document');
  * }
  *
  * @package CIC\Cicbase\Property\TypeConverter
