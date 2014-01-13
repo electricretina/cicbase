@@ -327,16 +327,21 @@ class FileReferenceFactory implements \TYPO3\CMS\Core\SingletonInterface {
 		$rows = $db->exec_SELECTgetRows($select, "$refTable, $fileTable", $where);
 		foreach ($rows as $row) {
 			$refUids[] = $row['uid'];
-			$filesToDelete[$row['uid_local']] = PATH_site.'fileadmin/'.$row['identifier'];
+			$filesToDelete[$row['uid_local']] = $row['identifier'];
 		}
 
 		// Don't delete File objects if there are other references to them
+		// Don't unlink the actual file if there is another file with the same identifier
 		$refUidsClause = implode(',', $refUids);
 		foreach ($filesToDelete as $fileUid => $filePath) {
-			$count = $db->exec_SELECTcountRows('uid', "$refTable", "uid_local = $fileUid AND uid NOT IN ($refUidsClause) AND $identifyingClauses");
-			if (!$count) {
+			$refCount = $db->exec_SELECTcountRows('uid', $refTable, "$refTable.uid_local = $fileUid AND $refTable.uid NOT IN ($refUidsClause) AND $identifyingClauses");
+			if (!$refCount) {
 				$fileUids[] = $fileUid;
-				unlink($filePath);
+			}
+
+			$fileCount = $db->exec_SELECTcountRows('uid', $fileTable, "$fileTable.identifier = '$filePath' AND $fileTable.uid != $fileUid");
+			if (!$fileCount) {
+				unlink(PATH_site.'fileadmin/'.$filePath);
 			}
 		}
 
