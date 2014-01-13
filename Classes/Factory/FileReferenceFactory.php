@@ -192,7 +192,7 @@ class FileReferenceFactory implements \TYPO3\CMS\Core\SingletonInterface {
 		// Build a FileReference object using our reference properties
 		$ref = $this->fileFactory->createFileReferenceObject($referenceProperties);
 
-		// Convert the Core FileReference we made to an ExtBase FileReference
+		// Convert the Core FileReference we made to an CICBase FileReference
 		$fileReference = $this->objectManager->getEmptyObject('CIC\Cicbase\Domain\Model\FileReference');
 		$fileReference->setOriginalResource($ref);
 		return $fileReference;
@@ -208,10 +208,13 @@ class FileReferenceFactory implements \TYPO3\CMS\Core\SingletonInterface {
 	 * @param FileReference $fileReference
 	 * @param string $key
 	 */
-	protected function save(FileReference $fileReference, $key = '') {
+	protected function save(FileReference &$fileReference, $key = '') {
 		if ($fileReference->getUid()) {
 			return;
 		}
+		/** @var \TYPO3\CMS\Dbal\Database\DatabaseConnection $db */
+		$db = $GLOBALS['TYPO3_DB'];
+
 		$pathExists = $this->permanentPathExists();
 		$relFolderPath = $this->buildPermanentPath(FALSE);
 
@@ -220,7 +223,22 @@ class FileReferenceFactory implements \TYPO3\CMS\Core\SingletonInterface {
 		$ref = $fileReference->getOriginalResource();
 		$file = $ref->getOriginalFile();
 
-		$file->moveTo($folder, $file->getName(), 'replace');
+		$newFileIdentifier = '/' . $relFolderPath . '/' . $file->getName();
+		$fileName = $file->getName();
+
+		$existingFile = $db->exec_SELECTgetSingleRow('uid', 'sys_file', "name = '$fileName' AND identifier NOT LIKE '/_temp_/%' AND deleted = 0");
+		if (is_array($existingFile)) {
+
+			// Update the file reference to use the existing file
+			$fileReference->setUidLocal($existingFile['uid']);
+
+			// Remove the temp file
+			$file->delete();
+			$id = $file->getIdentifier();
+			$db->exec_DELETEquery('sys_file', "identifier = '$id'");
+		} else {
+			$file->moveTo($folder, $file->getName(), 'replace');
+		}
 
 		$this->limbo->clearHeld($key);
 	}
