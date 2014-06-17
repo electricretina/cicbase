@@ -6,15 +6,14 @@ RL = require 'readline'
 class RefactorFile
 
   legacyRegex: {
-    classes: new RegExp('Tx_[^ :]+|t3lib_[^ :]+', 'g')
+    classes: new RegExp('Tx_[^ :(\'"]+|t3lib_[^ :(\'"]+', 'g')
     classDeclaration: new RegExp('^\s*class Tx_[^ ]+')
-    extBaseClasses: new RegExp('Tx_Extbase[^ ]+', 'g')
-    fluidClasses: new RegExp('Tx_Fluid[^ ]+', 'g')
-    t3libClasses: new RegExp('t3lib_[^ ]+', 'g')
+    extBaseClasses: new RegExp('Tx_Extbase[^ :(\'"]+', 'g')
+    fluidClasses: new RegExp('Tx_Fluid[^ :(\'"]+', 'g')
+    t3libClasses: new RegExp('t3lib_[^ :(\'"]+', 'g')
   }
 
   lineNo: 0
-  legacyDataFound: {}
   classDeclarations: {}
 
 
@@ -22,10 +21,22 @@ class RefactorFile
     return if @skip()
     @iface = RL.createInterface(input: FS.createReadStream(@filename), terminal: false)
     @iface.on 'line', @handleLine.bind(@)
-#    @iface.on 'close', -> false
+    @iface.on 'close', @summarize.bind(@)
+
+
+  summarize: ->
+    return unless @legacyDataFound
+    console.log @filename
+
+    hasClassDeclaration = if @classDeclarations.length then 'yes' else 'no'
+    console.log "  has a legacy class declaration? #{hasClassDeclaration}"
+
+    for lineNo, info of @legacyDataFound
+      for type, className of info
+        console.log "  #{type} class [#{lineNo}]: #{className}"
+
 
   handleLine: (line) ->
-    console.log(@filename) if @lineNo == 0
     return unless line
 
     @lineNo++
@@ -35,21 +46,22 @@ class RefactorFile
 
     if declarations
       @classDeclarations[@lineNo] = declarations
-      console.log "  class declaration [#{@lineNo}]: #{line}"
 
     if classes
       for className in classes
-        if @legacyRegex.extBaseClasses.test(className)
-          @legacyDataFound[@lineNo] = [] unless @legacyDataFound[@lineNo]
-          console.log "  extbase class     [#{@lineNo}]: #{line}"
-        else if @legacyRegex.fluidClasses.test(className)
-          console.log "  fluid class       [#{@lineNo}]: #{line}"
-        else if @legacyRegex.t3libClasses(className)
-          console.log "  t3lib class       [#{@lineNo}]: #{line}"
-        else
-          console.log "  other class       [#{@lineNo}]: #{line}"
+        continue if @saveClassName(className, @legacyRegex.extBaseClasses, 'extbase')
+        continue if @saveClassName(className, @legacyRegex.fluidClasses, 'fluid')
+        continue if @saveClassName(className, @legacyRegex.t3libClasses, 't3lib')
+        @saveClassName(className, '', 'other')
 
-  saveClassName: (className) ->
+  saveClassName: (className, regex, type) ->
+    if type ==  'other' or regex.test(className)
+      @legacyDataFound = {} unless @legacyDataFound
+      @legacyDataFound[@filename+' '+@lineNo] = {} unless @legacyDataFound[@filename+' '+@lineNo]
+      @legacyDataFound[@filename+' '+@lineNo][type] = [] unless @legacyDataFound[@filename+' '+@lineNo][type]
+      @legacyDataFound[@filename+' '+@lineNo][type].push className
+      return true
+    return false
 
 
   skip: ->
